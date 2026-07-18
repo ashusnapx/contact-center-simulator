@@ -3,9 +3,10 @@ import { eq, and } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { simulations, personas } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
+import { getApiKeys } from "@/lib/api-keys";
 import type { TranscriptEntry } from "@/lib/db/schema";
 
-const LLM_API_URL = "https://api.openai.com/v1/chat/completions";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent";
 
 export async function POST(
   _req: Request,
@@ -39,10 +40,11 @@ export async function POST(
     where: eq(personas.id, sim.personaId!),
   });
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const keys = await getApiKeys(session.user.id);
+  const apiKey = keys.geminiApiKey;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OpenAI API key not configured" },
+      { error: "Gemini API key not configured. Add it in Settings." },
       { status: 500 }
     );
   }
@@ -76,17 +78,16 @@ Return ONLY a JSON object with these 8 fields. No other text.
 {"empathy":X,"listening":X,"confidence":X,"ownership":X,"callControl":X,"compliance":X,"resolution":X,"communication":X}`;
 
   try {
-    const llmRes = await fetch(LLM_API_URL, {
+    const llmRes = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [{ role: "user", content: scoringPrompt }],
-        temperature: 0.3,
-        max_tokens: 300,
+        system_instruction: { parts: [{ text: "You are an expert contact centre QA evaluator. Return only valid JSON." }] },
+        contents: [{ role: "user", parts: [{ text: scoringPrompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 300,
+        },
       }),
     });
 
@@ -95,7 +96,7 @@ Return ONLY a JSON object with these 8 fields. No other text.
     }
 
     const data = await llmRes.json();
-    const content = data.choices[0]?.message?.content || "{}";
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
 
     // Parse the JSON response
     const scoresMatch = content.match(/\{[\s\S]*?\}/);
@@ -108,7 +109,7 @@ Return ONLY a JSON object with these 8 fields. No other text.
 
     await db
       .update(simulations)
-      .set({ qaScore: avg })
+      .set({ qaScore: avg, qaBreakdown: scores })
       .where(eq(simulations.id, id));
 
     return NextResponse.json({ score: avg, breakdown: scores });

@@ -61,6 +61,7 @@ export default function SimulationPage() {
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [ended, setEnded] = useState(false);
+  const [fetchingTranscript, setFetchingTranscript] = useState(false);
   const [mode, setMode] = useState<"text" | "voice">("text");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -159,21 +160,33 @@ export default function SimulationPage() {
       prev ? { ...prev, transcript: [...prev.transcript, entry] } : prev
     );
 
-    // Also save to backend
+    // Persist to DB via transcript endpoint (no AI response)
     try {
-      await fetch(`/api/simulations/${id}/chat`, {
+      await fetch(`/api/simulations/${id}/transcript`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: `[Voice] ${segment.text}` }),
+        body: JSON.stringify({
+          entries: [
+            {
+              role: entry.role,
+              content: entry.content,
+              timestamp: entry.timestamp,
+              emotion: entry.emotion,
+            },
+          ],
+        }),
       });
     } catch {
-      // ignore
+      // ignore — transcript still in local state
     }
   }
 
   async function handleEndCall() {
     setEnded(true);
+    setFetchingTranscript(true);
+
     try {
+      // Update simulation status
       await fetch(`/api/simulations/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -186,6 +199,24 @@ export default function SimulationPage() {
     } catch {
       // ignore
     }
+
+    // Wait for Vaani to process, then fetch transcript
+    try {
+      await new Promise((r) => setTimeout(r, 5000));
+      const transcriptRes = await fetch(`/api/simulations/${id}/fetch-transcript`, {
+        method: "POST",
+      });
+      if (transcriptRes.ok) {
+        const transcriptData = await transcriptRes.json();
+        setSim((prev) =>
+          prev ? { ...prev, transcript: transcriptData.transcript } : prev
+        );
+      }
+    } catch {
+      // Transcript fetch failed — replay page will have retry option
+    }
+
+    setFetchingTranscript(false);
     router.push(`/dashboard/simulations/${id}/replay`);
   }
 
@@ -400,17 +431,28 @@ export default function SimulationPage() {
       ) : ended ? (
         <div className="bg-[#fff9c4] border-2 border-[#2d2d2d] p-4 wobbly-sm text-center">
           <p className="font-[family-name:var(--font-heading)] text-lg font-bold">
-            Call Ended
+            {fetchingTranscript ? "Fetching Transcript..." : "Call Ended"}
           </p>
           <p className="font-[family-name:var(--font-body)] text-sm text-[#2d2d2d]/60">
-            Duration: {formatTime(elapsed)} · {transcript.length} messages
+            {fetchingTranscript ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 size={14} className="animate-spin" />
+                Retrieving transcript from Vaani...
+              </span>
+            ) : (
+              <>
+                Duration: {formatTime(elapsed)} · {transcript.length} messages
+              </>
+            )}
           </p>
-          <Link
-            href={`/dashboard/simulations/${id}/replay`}
-            className="btn-hand px-6 py-2 mt-3 inline-flex items-center gap-2"
-          >
-            View Replay & Score
-          </Link>
+          {!fetchingTranscript && (
+            <Link
+              href={`/dashboard/simulations/${id}/replay`}
+              className="btn-hand px-6 py-2 mt-3 inline-flex items-center gap-2"
+            >
+              View Replay & Score
+            </Link>
+          )}
         </div>
       ) : null}
     </div>

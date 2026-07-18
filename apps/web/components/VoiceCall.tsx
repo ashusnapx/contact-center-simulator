@@ -23,6 +23,7 @@ type VoiceSession = {
   roomName: string;
   connectionUrl: string;
   liveCaptionsUrl?: string;
+  callId?: string;
 };
 
 type TranscriptSegment = {
@@ -51,6 +52,8 @@ export default function VoiceCall({
   const roomRef = useRef<Room | null>(null);
   const captionsWsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const callIdRef = useRef<string | null>(null);
+  const elapsedRef = useRef(0);
 
   const cleanup = useCallback(() => {
     if (timerRef.current) {
@@ -66,6 +69,7 @@ export default function VoiceCall({
       roomRef.current = null;
     }
     setElapsed(0);
+    elapsedRef.current = 0;
   }, []);
 
   useEffect(() => {
@@ -77,15 +81,10 @@ export default function VoiceCall({
     setError("");
 
     try {
-      // Create voice session via our API
       const res = await fetch("/api/voice/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          simulationId,
-          personaName,
-          welcomeMessage: `Hello! I need help. I'm calling about an issue.`,
-        }),
+        body: JSON.stringify({ simulationId }),
       });
 
       if (!res.ok) {
@@ -96,8 +95,8 @@ export default function VoiceCall({
       }
 
       const session: VoiceSession = await res.json();
+      callIdRef.current = session.callId || null;
 
-      // Connect to LiveKit
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
@@ -105,13 +104,13 @@ export default function VoiceCall({
 
       roomRef.current = room;
 
-      // Handle events
       room.on(RoomEvent.Connected, () => {
         setStatus("connected");
-        // Start timer
         const startTime = Date.now();
         timerRef.current = setInterval(() => {
-          setElapsed(Math.floor((Date.now() - startTime) / 1000));
+          const secs = Math.floor((Date.now() - startTime) / 1000);
+          setElapsed(secs);
+          elapsedRef.current = secs;
         }, 1000);
       });
 
@@ -130,33 +129,36 @@ export default function VoiceCall({
         track.detach().forEach((el) => el.remove());
       });
 
-      // Handle speak detection for transcript
-      room.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
-        // This is a simplified version - real implementation would use
-        // LiveKit's transcription features or the Vaani live captions URL
-      });
-
-      // Connect with token
       await room.connect(session.connectionUrl, session.token);
-
-      // Enable microphone
       await room.localParticipant.setMicrophoneEnabled(true);
 
       // Connect to live captions WebSocket if available
       if (session.liveCaptionsUrl) {
-        const ws = new WebSocket(session.liveCaptionsUrl);
-        captionsWsRef.current = ws;
+        try {
+          const ws = new WebSocket(session.liveCaptionsUrl);
+          captionsWsRef.current = ws;
 
-        ws.onmessage = (event) => {
-          const msg = JSON.parse(event.data);
-          if (msg.type === "transcript" && msg.segment) {
-            onTranscript?.({
-              speaker: msg.segment.speaker === "agent" ? "agent" : "user",
-              text: msg.segment.text,
-              timestamp: msg.segment.timestamp || Date.now() / 1000,
-            });
-          }
-        };
+          ws.onmessage = (event) => {
+            try {
+              const msg = JSON.parse(event.data);
+              if (msg.type === "transcript" && msg.segment) {
+                onTranscript?.({
+                  speaker: msg.segment.speaker === "agent" ? "agent" : "user",
+                  text: msg.segment.text,
+                  timestamp: msg.segment.timestamp || Date.now() / 1000,
+                });
+              }
+            } catch {
+              // ignore parse errors
+            }
+          };
+
+          ws.onerror = () => {
+            // Live captions WebSocket failed — transcript will be fetched after call ends
+          };
+        } catch {
+          // WebSocket connection failed — non-critical
+        }
       }
     } catch (err) {
       console.error("Voice connection error:", err);
@@ -166,8 +168,17 @@ export default function VoiceCall({
   }
 
   function handleStop() {
+    const finalElapsed = elapsedRef.current;
     cleanup();
     setStatus("idle");
+
+    // Trigger transcript fetch from Vaani API (don't block on it)
+    if (callIdRef.current) {
+      fetch(`/api/simulations/${simulationId}/fetch-transcript`, {
+        method: "POST",
+      }).catch(() => {});
+    }
+
     onCallEnd?.();
   }
 
@@ -225,7 +236,6 @@ export default function VoiceCall({
     );
   }
 
-  // Connected state
   return (
     <div className="flex items-center gap-4 bg-green-50 border-2 border-green-400 px-6 py-4 wobbly-sm shadow-hard-sm">
       <div className="flex items-center gap-3 flex-1">

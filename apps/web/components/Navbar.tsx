@@ -6,10 +6,9 @@ import { Menu, X, LogOut, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 
 const navLinks = [
-  { label: "Features", href: "#features" },
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Industries", href: "#industries" },
-  { label: "Roadmap", href: "#roadmap" },
+  { label: "Features", href: "/#features" },
+  { label: "Pricing", href: "/#pricing" },
+  { label: "About", href: "/#about" },
 ];
 
 export default function Navbar() {

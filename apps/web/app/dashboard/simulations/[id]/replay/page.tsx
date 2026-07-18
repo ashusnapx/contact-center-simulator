@@ -40,6 +40,7 @@ type Simulation = {
   personaId: string | null;
   transcript: TranscriptEntry[];
   qaScore: number | null;
+  qaBreakdown: QABreakdown | null;
   startedAt: string;
   endedAt: string;
   durationSeconds: number;
@@ -96,6 +97,7 @@ export default function ReplayPage() {
   const [qa, setQa] = useState<QABreakdown | null>(null);
   const [loading, setLoading] = useState(true);
   const [scoring, setScoring] = useState(false);
+  const [fetchingTranscript, setFetchingTranscript] = useState(false);
 
   useEffect(() => {
     fetch(`/api/simulations/${id}`)
@@ -103,8 +105,9 @@ export default function ReplayPage() {
       .then((data) => {
         setSim(data);
         setLoading(false);
-        if (data.qaScore != null) {
-          // Generate breakdown from overall score
+        if (data.qaBreakdown) {
+          setQa(data.qaBreakdown);
+        } else if (data.qaScore != null) {
           generateQABreakdown(data.qaScore);
         }
       });
@@ -132,13 +135,38 @@ export default function ReplayPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setSim((prev) => (prev ? { ...prev, qaScore: data.score } : prev));
-        generateQABreakdown(data.score);
+        setSim((prev) =>
+          prev ? { ...prev, qaScore: data.score, qaBreakdown: data.breakdown } : prev
+        );
+        if (data.breakdown) {
+          setQa(data.breakdown);
+        } else {
+          generateQABreakdown(data.score);
+        }
       }
     } catch {
       // ignore
     } finally {
       setScoring(false);
+    }
+  }
+
+  async function handleFetchTranscript() {
+    setFetchingTranscript(true);
+    try {
+      const res = await fetch(`/api/simulations/${id}/fetch-transcript`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSim((prev) =>
+          prev ? { ...prev, transcript: data.transcript } : prev
+        );
+      }
+    } catch {
+      // ignore
+    } finally {
+      setFetchingTranscript(false);
     }
   }
 
@@ -184,6 +212,25 @@ export default function ReplayPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {transcript.length === 0 && (
+            <button
+              onClick={handleFetchTranscript}
+              disabled={fetchingTranscript}
+              className="btn-hand px-6 py-2 flex items-center gap-2"
+            >
+              {fetchingTranscript ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Fetching...
+                </>
+              ) : (
+                <>
+                  <MessageSquare size={16} />
+                  Fetch Transcript
+                </>
+              )}
+            </button>
+          )}
           {sim.qaScore == null && (
             <button
               onClick={handleScore}

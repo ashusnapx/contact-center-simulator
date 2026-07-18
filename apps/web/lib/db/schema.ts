@@ -21,6 +21,22 @@ export const users = pgTable("users", {
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
+// --- User Settings ---
+
+export const user_settings = pgTable("user_settings", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).unique(),
+  vaaniApiKey: text("vaani_api_key"),
+  vaaniAgentId: text("vaani_agent_id"),
+  geminiApiKey: text("gemini_api_key"),
+  openaiApiKey: text("openai_api_key"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type UserSetting = typeof user_settings.$inferSelect;
+export type NewUserSetting = typeof user_settings.$inferInsert;
+
 // --- Personas ---
 
 export type PersonalityTraits = {
@@ -84,9 +100,11 @@ export const simulations = pgTable("simulations", {
   transcript: jsonb("transcript").$type<TranscriptEntry[]>().notNull().default([]),
   emotionTimeline: jsonb("emotion_timeline").$type<EmotionSnapshot[]>().notNull().default([]),
   qaScore: real("qa_score"),
+  qaBreakdown: jsonb("qa_breakdown"),
   startedAt: timestamp("started_at"),
   endedAt: timestamp("ended_at"),
   durationSeconds: integer("duration_seconds"),
+  callId: text("call_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

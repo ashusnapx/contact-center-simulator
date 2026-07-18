@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { personas, simulations } from "@/lib/db/schema";
-import { eq, count } from "drizzle-orm";
-import { Play, BarChart3, Users, Clock, Trophy, Zap } from "lucide-react";
+import { eq, count, inArray } from "drizzle-orm";
+import { Play, BarChart3, Users, Clock, Trophy, Zap, ChevronRight } from "lucide-react";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -25,6 +25,15 @@ export default async function DashboardPage() {
     orderBy: (s, { desc }) => [desc(s.createdAt)],
     limit: 5,
   });
+
+  const personaIds = recentSims.map((s) => s.personaId).filter(Boolean) as string[];
+  const personaMap = new Map<string, { name: string; emoji: string; industry: string; difficulty: string }>();
+  if (personaIds.length > 0) {
+    const personaList = await db.query.personas.findMany({
+      where: inArray(personas.id, personaIds),
+    });
+    personaList.forEach((p) => personaMap.set(p.id, { name: p.name, emoji: p.emoji || "👤", industry: p.industry, difficulty: p.difficulty }));
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">
@@ -135,10 +144,13 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {recentSims.map((sim) => (
-              <div
+            {recentSims.map((sim) => {
+              const persona = sim.personaId ? personaMap.get(sim.personaId) : null;
+              return (
+              <Link
                 key={sim.id}
-                className="flex items-center justify-between p-3 bg-[#fdfbf7] border border-[#e5e0d8] wobbly-sm"
+                href={`/dashboard/simulations/${sim.id}/replay`}
+                className="flex items-center justify-between p-3 bg-[#fdfbf7] border border-[#e5e0d8] wobbly-sm hover:bg-[#fff9c4] hover:border-[#2d2d2d] transition-colors cursor-pointer group"
               >
                 <div className="flex items-center gap-3">
                   <span
@@ -150,20 +162,36 @@ export default async function DashboardPage() {
                           : "bg-gray-400"
                     }`}
                   />
-                  <span className="font-[family-name:var(--font-body)]">
-                    Simulation
-                  </span>
+                  {persona && (
+                    <span className="font-[family-name:var(--font-body)] text-lg">
+                      {persona.emoji}
+                    </span>
+                  )}
+                  <div>
+                    <span className="font-[family-name:var(--font-body)] group-hover:text-[#2d2d2d] transition-colors block">
+                      {persona?.name || "Simulation"}
+                    </span>
+                    {persona && (
+                      <span className="font-[family-name:var(--font-body)] text-xs text-[#2d2d2d]/40">
+                        {persona.industry} · {persona.difficulty}
+                      </span>
+                    )}
+                  </div>
                   {sim.qaScore != null && (
-                    <span className="font-[family-name:var(--font-body)] text-sm font-bold text-[#2d5da1]">
+                    <span className="font-[family-name:var(--font-body)] text-sm font-bold text-[#2d5da1] ml-2">
                       Score: {Math.round(sim.qaScore)}%
                     </span>
                   )}
                 </div>
-                <span className="font-[family-name:var(--font-body)] text-sm text-[#2d2d2d]/50">
-                  {new Date(sim.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-            ))}
+                <div className="flex items-center gap-3">
+                  <span className="font-[family-name:var(--font-body)] text-sm text-[#2d2d2d]/50">
+                    {new Date(sim.createdAt).toLocaleDateString()}
+                  </span>
+                  <ChevronRight size={16} className="text-[#2d2d2d]/30 group-hover:text-[#2d2d2d]/60 transition-colors" />
+                </div>
+              </Link>
+              );
+            })}
           </div>
         )}
       </div>

@@ -1,4 +1,3 @@
-import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import Problem from "@/components/Problem";
 import Solution from "@/components/Solution";
@@ -10,26 +9,21 @@ import CareerMode from "@/components/CareerMode";
 import WhyVaaniVerse from "@/components/WhyVaaniVerse";
 import Roadmap from "@/components/Roadmap";
 import CTA from "@/components/CTA";
-import Footer from "@/components/Footer";
 
 export default function Home() {
   return (
     <>
-      <Navbar />
-      <main>
-        <Hero />
-        <Problem />
-        <Solution />
-        <HowItWorks />
-        <Features />
-        <IndustryPacks />
-        <DifficultyLevels />
-        <CareerMode />
-        <WhyVaaniVerse />
-        <Roadmap />
-        <CTA />
-      </main>
-      <Footer />
+      <Hero />
+      <Problem />
+      <Solution />
+      <HowItWorks />
+      <Features />
+      <IndustryPacks />
+      <DifficultyLevels />
+      <CareerMode />
+      <WhyVaaniVerse />
+      <Roadmap />
+      <CTA />
     </>
   );
 }

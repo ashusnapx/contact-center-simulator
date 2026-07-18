@@ -12,6 +12,7 @@ import {
   Heart,
   Target,
   Trash2,
+  Pencil,
   ChevronRight,
 } from "lucide-react";
 
@@ -157,6 +158,13 @@ export default async function PersonasPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <Link
+                      href={`/dashboard/personas/${p.id}/edit`}
+                      className="p-2 text-[#2d2d2d]/40 hover:text-[#2d5da1] transition-colors"
+                      title="Edit persona"
+                    >
+                      <Pencil size={16} />
+                    </Link>
                     {p.isPrebuilt !== "true" && (
                       <form
                         action={async () => {

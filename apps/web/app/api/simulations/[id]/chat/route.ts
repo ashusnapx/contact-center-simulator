@@ -3,49 +3,19 @@ import { eq, and } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { simulations, personas } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
+import { getApiKeys } from "@/lib/api-keys";
 import type { TranscriptEntry, EmotionSnapshot } from "@/lib/db/schema";
 
-const LLM_API_URL = "https://api.openai.com/v1/chat/completions";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent";
 
 function buildSystemPrompt(persona: Record<string, unknown>, personalityTraits: Record<string, number>) {
-  return `You are role-playing as a customer in a contact centre simulation. Stay in character at all times.
+  return `You are ${persona.name}, a real customer calling support. NOT an AI. You are the CUSTOMER.
 
-CUSTOMER PROFILE:
-Name: ${persona.name}
-Industry: ${persona.industry}
+Problem: ${persona.backstory}
+Hidden goal (don't reveal): ${persona.hiddenObjective}
 Mood: ${persona.mood}
-Urgency: ${persona.urgency}/10
-Technical Knowledge: ${persona.technicalKnowledge}/10
-Difficulty: ${persona.difficulty}
 
-BACKSTORY:
-${persona.backstory}
-
-HIDDEN OBJECTIVE (DO NOT reveal this directly — the agent must discover it through questioning):
-${persona.hiddenObjective}
-
-PERSONALITY TRAITS (scale 0-100):
-- Agreeableness: ${personalityTraits.agreeableness}%
-- Patience: ${personalityTraits.patience}%
-- Trust: ${personalityTraits.trust}%
-- Stress: ${personalityTraits.stress}%
-- Empathy: ${personalityTraits.empathy}%
-- Assertiveness: ${personalityTraits.assertiveness}%
-
-BEHAVIOR RULES:
-- Respond as this customer would — in first person, staying in character
-- Express emotions that match your mood and personality
-- React to the agent's tone, empathy, and competence
-- If the agent is rude or dismissive, get more upset
-- If the agent is empathetic and helpful, gradually calm down
-- Never break character or reveal you are an AI
-- Keep responses short and natural (1-3 sentences typically)
-- Use colloquial language, contractions, and natural speech patterns
-- Include emotional expressions (sighs, frustration, gratitude, etc.)
-- If the agent asks about your hidden objective, be evasive or hint at it without stating it directly
-- React to silence or dead air with impatience if urgency is high
-
-IMPORTANT: Respond ONLY with the customer's dialogue. Do not include narration, stage directions, or meta-commentary.`;
+1-2 sentences max. Use contractions. Never say you are AI. Respond as the customer only.`;
 }
 
 function getCurrentEmotion(mood: string, stress: number, patience: number): { valence: number; arousal: number } {
@@ -129,27 +99,46 @@ export async function POST(
     })),
   ];
 
-  // Call LLM
-  const apiKey = process.env.OPENAI_API_KEY;
+  // Call LLM (Gemini via settings or env)
+  const keys = await getApiKeys(session.user.id);
+  const apiKey = keys.geminiApiKey;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OpenAI API key not configured" },
+      { error: "Gemini API key not configured. Add it in Settings." },
       { status: 500 }
     );
   }
 
   try {
-    const llmRes = await fetch(LLM_API_URL, {
+    // Build Gemini format messages
+    const systemPrompt = messages[0]?.content || "";
+    const conversationHistory = messages.slice(1);
+
+    // Convert to Gemini format
+    // Gemini requires first message to be from user, not model
+    let contents = conversationHistory.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
+
+    // If first message is from model (agent spoke first), prepend a user prompt
+    if (contents.length > 0 && contents[0].role === "model") {
+      contents = [
+        { role: "user", parts: [{ text: "Hello?" }] },
+        ...contents,
+      ];
+    }
+
+    const llmRes = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-4o",
-        messages,
-        temperature: 0.8,
-        max_tokens: 200,
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 200,
+        },
       }),
     });
 
@@ -160,7 +149,9 @@ export async function POST(
     }
 
     const data = await llmRes.json();
-    const customerResponse = data.choices[0]?.message?.content || "I'm not sure what to say.";
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    console.log("[Chat] Raw text:", JSON.stringify(rawText)?.substring(0, 200));
+    const customerResponse = rawText || "I'm not sure what to say.";
 
     // Add customer response to transcript
     const customerEntry: TranscriptEntry = {
