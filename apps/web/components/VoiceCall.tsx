@@ -5,7 +5,6 @@ import {
   Room,
   RoomEvent,
   Track,
-  ConnectionState,
   Participant,
 } from "livekit-client";
 import {
@@ -16,6 +15,11 @@ import {
   Loader2,
   AlertCircle,
   Volume2,
+  MessageSquare,
+  Settings,
+  ChevronDown,
+  ChevronUp,
+  Wifi,
 } from "lucide-react";
 
 type VoiceSession = {
@@ -24,6 +28,13 @@ type VoiceSession = {
   connectionUrl: string;
   liveCaptionsUrl?: string;
   callId?: string;
+  config?: {
+    bgNoise: string;
+    fillerWords: string;
+    maxDuration: number;
+    guardrails: string;
+    eagerness: string;
+  };
 };
 
 type TranscriptSegment = {
@@ -49,6 +60,9 @@ export default function VoiceCall({
   const [error, setError] = useState("");
   const [isMuted, setIsMuted] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [liveCaptions, setLiveCaptions] = useState<{ speaker: string; text: string }[]>([]);
+  const [showCaptions, setShowCaptions] = useState(true);
+  const [sessionConfig, setSessionConfig] = useState<VoiceSession["config"] | undefined>(undefined);
   const roomRef = useRef<Room | null>(null);
   const captionsWsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -70,6 +84,7 @@ export default function VoiceCall({
     }
     setElapsed(0);
     elapsedRef.current = 0;
+    setLiveCaptions([]);
   }, []);
 
   useEffect(() => {
@@ -96,6 +111,7 @@ export default function VoiceCall({
 
       const session: VoiceSession = await res.json();
       callIdRef.current = session.callId || null;
+      setSessionConfig(session.config || undefined);
 
       const room = new Room({
         adaptiveStream: true,
@@ -132,7 +148,6 @@ export default function VoiceCall({
       await room.connect(session.connectionUrl, session.token);
       await room.localParticipant.setMicrophoneEnabled(true);
 
-      // Connect to live captions WebSocket if available
       if (session.liveCaptionsUrl) {
         try {
           const ws = new WebSocket(session.liveCaptionsUrl);
@@ -142,6 +157,11 @@ export default function VoiceCall({
             try {
               const msg = JSON.parse(event.data);
               if (msg.type === "transcript" && msg.segment) {
+                const caption = {
+                  speaker: msg.segment.speaker === "agent" ? "Agent" : "You",
+                  text: msg.segment.text,
+                };
+                setLiveCaptions((prev) => [...prev.slice(-20), caption]);
                 onTranscript?.({
                   speaker: msg.segment.speaker === "agent" ? "agent" : "user",
                   text: msg.segment.text,
@@ -149,15 +169,11 @@ export default function VoiceCall({
                 });
               }
             } catch {
-              // ignore parse errors
+              // ignore
             }
           };
-
-          ws.onerror = () => {
-            // Live captions WebSocket failed — transcript will be fetched after call ends
-          };
         } catch {
-          // WebSocket connection failed — non-critical
+          // non-critical
         }
       }
     } catch (err) {
@@ -168,17 +184,13 @@ export default function VoiceCall({
   }
 
   function handleStop() {
-    const finalElapsed = elapsedRef.current;
     cleanup();
     setStatus("idle");
-
-    // Trigger transcript fetch from Vaani API (don't block on it)
     if (callIdRef.current) {
       fetch(`/api/simulations/${simulationId}/fetch-transcript`, {
         method: "POST",
       }).catch(() => {});
     }
-
     onCallEnd?.();
   }
 
@@ -237,42 +249,87 @@ export default function VoiceCall({
   }
 
   return (
-    <div className="flex items-center gap-4 bg-green-50 border-2 border-green-400 px-6 py-4 wobbly-sm shadow-hard-sm">
-      <div className="flex items-center gap-3 flex-1">
-        <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-        <div>
-          <div className="font-[family-name:var(--font-heading)] font-bold text-green-800">
-            Voice Call Active
+    <div className="space-y-3">
+      {/* Main call bar */}
+      <div className="flex items-center gap-4 bg-green-50 border-2 border-green-400 px-6 py-4 wobbly-sm shadow-hard-sm">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+          <div>
+            <div className="font-[family-name:var(--font-heading)] font-bold text-green-800">
+              Voice Call Active
+            </div>
+            <div className="font-[family-name:var(--font-body)] text-sm text-green-600">
+              {formatTime(elapsed)} · Speaking with {personaName}
+            </div>
           </div>
-          <div className="font-[family-name:var(--font-body)] text-sm text-green-600">
-            {formatTime(elapsed)} · Speaking with {personaName}
+        </div>
+
+        {sessionConfig && (
+          <div className="hidden md:flex items-center gap-3 text-xs font-[family-name:var(--font-body)] text-green-700">
+            <span className="flex items-center gap-1">
+              <Wifi size={12} />
+              {sessionConfig.eagerness}
+            </span>
+            {sessionConfig.bgNoise !== "off" && (
+              <span className="flex items-center gap-1">
+                <Volume2 size={12} />
+                {sessionConfig.bgNoise}
+              </span>
+            )}
           </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowCaptions(!showCaptions)}
+            className={`p-2 border-2 rounded-lg transition-colors ${
+              showCaptions
+                ? "bg-[#2d5da1] border-[#2d5da1] text-white"
+                : "bg-white border-[#2d2d2d] text-[#2d2d2d] hover:bg-gray-100"
+            }`}
+            title={showCaptions ? "Hide captions" : "Show captions"}
+          >
+            <MessageSquare size={16} />
+          </button>
+
+          <button
+            onClick={toggleMute}
+            className={`p-2 border-2 rounded-lg transition-colors ${
+              isMuted
+                ? "bg-[#ff4d4d] border-[#ff4d4d] text-white"
+                : "bg-white border-[#2d2d2d] text-[#2d2d2d] hover:bg-gray-100"
+            }`}
+            title={isMuted ? "Unmute" : "Mute"}
+          >
+            {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
+          </button>
+
+          <button
+            onClick={handleStop}
+            className="p-2 bg-[#ff4d4d] border-2 border-[#ff4d4d] text-white rounded-lg hover:bg-red-600 transition-colors"
+            title="End call"
+          >
+            <PhoneOff size={16} />
+          </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Volume2 size={16} className="text-green-600 animate-pulse" />
-
-        <button
-          onClick={toggleMute}
-          className={`p-2 border-2 rounded-lg transition-colors ${
-            isMuted
-              ? "bg-[#ff4d4d] border-[#ff4d4d] text-white"
-              : "bg-white border-[#2d2d2d] text-[#2d2d2d] hover:bg-gray-100"
-          }`}
-          title={isMuted ? "Unmute" : "Mute"}
-        >
-          {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
-        </button>
-
-        <button
-          onClick={handleStop}
-          className="p-2 bg-[#ff4d4d] border-2 border-[#ff4d4d] text-white rounded-lg hover:bg-red-600 transition-colors"
-          title="End call"
-        >
-          <PhoneOff size={16} />
-        </button>
-      </div>
+      {/* Live captions panel */}
+      {showCaptions && liveCaptions.length > 0 && (
+        <div className="bg-white border-2 border-[#2d2d2d] wobbly-sm shadow-hard-sm p-4 max-h-48 overflow-y-auto">
+          <div className="font-[family-name:var(--font-heading)] text-xs font-bold text-[#2d2d2d]/50 mb-2 uppercase tracking-wide">
+            Live Captions
+          </div>
+          <div className="space-y-2">
+            {liveCaptions.map((c, i) => (
+              <div key={i} className={`flex gap-2 text-sm font-[family-name:var(--font-body)] ${c.speaker === "Agent" ? "text-[#2d5da1]" : "text-[#ff4d4d]"}`}>
+                <span className="font-bold shrink-0">{c.speaker}:</span>
+                <span className="text-[#2d2d2d]">{c.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

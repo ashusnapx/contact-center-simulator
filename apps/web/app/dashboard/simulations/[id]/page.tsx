@@ -15,6 +15,15 @@ import {
   Volume2,
   MessageSquare,
   Mic,
+  Settings,
+  ChevronDown,
+  ChevronUp,
+  Waves,
+  Timer,
+  Shield,
+  Gauge,
+  Brain,
+  Music,
 } from "lucide-react";
 
 const VoiceCall = dynamic(() => import("@/components/VoiceCall"), {
@@ -50,6 +59,27 @@ type Simulation = {
   };
 };
 
+const DIFFICULTY_PRESETS = [
+  { value: "beginner", label: "Beginner", desc: "No noise, patient, cooperative", color: "bg-green-100 border-green-400 text-green-800" },
+  { value: "intermediate", label: "Intermediate", desc: "Office noise, some filler words", color: "bg-yellow-100 border-yellow-400 text-yellow-800" },
+  { value: "advanced", label: "Advanced", desc: "Cafe noise, interrupts, demanding", color: "bg-orange-100 border-orange-400 text-orange-800" },
+  { value: "expert", label: "Expert", desc: "Street noise, very impatient", color: "bg-red-100 border-red-400 text-red-800" },
+  { value: "nightmare", label: "Nightmare", desc: "Maximum chaos, constant interruptions", color: "bg-purple-100 border-purple-400 text-purple-800" },
+];
+
+const BG_NOISES = [
+  { value: "office", label: "Office", icon: "🏢" },
+  { value: "cafe", label: "Cafe", icon: "☕" },
+  { value: "street", label: "Street", icon: "🚗" },
+  { value: "home", label: "Home", icon: "🏠" },
+];
+
+const GUARDRAIL_LEVELS = [
+  { value: "basic", label: "Basic", desc: "Minimal filtering" },
+  { value: "medium", label: "Medium", desc: "Standard compliance" },
+  { value: "strict", label: "Strict", desc: "Full compliance mode" },
+];
+
 export default function SimulationPage() {
   const router = useRouter();
   const params = useParams();
@@ -63,10 +93,20 @@ export default function SimulationPage() {
   const [ended, setEnded] = useState(false);
   const [fetchingTranscript, setFetchingTranscript] = useState(false);
   const [mode, setMode] = useState<"text" | "voice">("text");
+  const [showSettings, setShowSettings] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load simulation
+  // Simulation settings
+  const [difficulty, setDifficulty] = useState("intermediate");
+  const [bgNoiseEnabled, setBgNoiseEnabled] = useState(false);
+  const [bgNoiseSound, setBgNoiseSound] = useState("office");
+  const [bgNoiseVolume, setBgNoiseVolume] = useState(50);
+  const [fillerWordsFrequency, setFillerWordsFrequency] = useState(0.2);
+  const [maxCallDuration, setMaxCallDuration] = useState(15);
+  const [guardrailLevel, setGuardrailLevel] = useState("medium");
+  const [eagerness, setEagerness] = useState("balanced");
+
   useEffect(() => {
     fetch(`/api/simulations/${id}`)
       .then((r) => {
@@ -76,11 +116,32 @@ export default function SimulationPage() {
       .then((data) => {
         setSim(data);
         if (data.status !== "active") setEnded(true);
+        if (data.persona?.difficulty) {
+          setDifficulty(data.persona.difficulty);
+          applyDifficultyPreset(data.persona.difficulty);
+        }
       })
       .catch(() => setError("Failed to load simulation"));
   }, [id]);
 
-  // Timer
+  function applyDifficultyPreset(d: string) {
+    const presets: Record<string, Record<string, unknown>> = {
+      beginner: { bgNoiseEnabled: false, fillerWordsFrequency: 0, maxCallDuration: 10, guardrailLevel: "basic", eagerness: "slow" },
+      intermediate: { bgNoiseEnabled: true, bgNoiseSound: "office", bgNoiseVolume: 30, fillerWordsFrequency: 0.2, maxCallDuration: 15, guardrailLevel: "medium", eagerness: "balanced" },
+      advanced: { bgNoiseEnabled: true, bgNoiseSound: "cafe", bgNoiseVolume: 50, fillerWordsFrequency: 0.3, maxCallDuration: 15, guardrailLevel: "medium", eagerness: "fast" },
+      expert: { bgNoiseEnabled: true, bgNoiseSound: "street", bgNoiseVolume: 70, fillerWordsFrequency: 0.4, maxCallDuration: 10, guardrailLevel: "strict", eagerness: "fast" },
+      nightmare: { bgNoiseEnabled: true, bgNoiseSound: "street", bgNoiseVolume: 80, fillerWordsFrequency: 0.5, maxCallDuration: 10, guardrailLevel: "strict", eagerness: "fast" },
+    };
+    const p = presets[d] || presets.intermediate;
+    setBgNoiseEnabled(p.bgNoiseEnabled as boolean);
+    if (p.bgNoiseSound) setBgNoiseSound(p.bgNoiseSound as string);
+    if (p.bgNoiseVolume) setBgNoiseVolume(p.bgNoiseVolume as number);
+    setFillerWordsFrequency(p.fillerWordsFrequency as number);
+    setMaxCallDuration(p.maxCallDuration as number);
+    setGuardrailLevel(p.guardrailLevel as string);
+    setEagerness(p.eagerness as string);
+  }
+
   useEffect(() => {
     if (!sim?.startedAt || ended) return;
     const start = new Date(sim.startedAt).getTime();
@@ -90,12 +151,10 @@ export default function SimulationPage() {
     return () => clearInterval(interval);
   }, [sim?.startedAt, ended]);
 
-  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [sim?.transcript]);
 
-  // Auto-focus input in text mode
   useEffect(() => {
     if (!ended && mode === "text") inputRef.current?.focus();
   }, [ended, mode, sim?.transcript]);
@@ -160,24 +219,21 @@ export default function SimulationPage() {
       prev ? { ...prev, transcript: [...prev.transcript, entry] } : prev
     );
 
-    // Persist to DB via transcript endpoint (no AI response)
     try {
       await fetch(`/api/simulations/${id}/transcript`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          entries: [
-            {
-              role: entry.role,
-              content: entry.content,
-              timestamp: entry.timestamp,
-              emotion: entry.emotion,
-            },
-          ],
+          entries: [{
+            role: entry.role,
+            content: entry.content,
+            timestamp: entry.timestamp,
+            emotion: entry.emotion,
+          }],
         }),
       });
     } catch {
-      // ignore — transcript still in local state
+      // ignore
     }
   }
 
@@ -186,7 +242,6 @@ export default function SimulationPage() {
     setFetchingTranscript(true);
 
     try {
-      // Update simulation status
       await fetch(`/api/simulations/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -200,7 +255,6 @@ export default function SimulationPage() {
       // ignore
     }
 
-    // Wait for Vaani to process, then fetch transcript
     try {
       await new Promise((r) => setTimeout(r, 5000));
       const transcriptRes = await fetch(`/api/simulations/${id}/fetch-transcript`, {
@@ -213,7 +267,7 @@ export default function SimulationPage() {
         );
       }
     } catch {
-      // Transcript fetch failed — replay page will have retry option
+      // ignore
     }
 
     setFetchingTranscript(false);
@@ -249,7 +303,6 @@ export default function SimulationPage() {
         </Link>
 
         <div className="flex items-center gap-4">
-          {/* Mode Toggle */}
           <div className="flex border-2 border-[#2d2d2d] wobbly-sm overflow-hidden">
             <button
               onClick={() => setMode("text")}
@@ -303,23 +356,153 @@ export default function SimulationPage() {
               {sim.persona.name}
             </span>
             <span className="font-[family-name:var(--font-body)] text-sm text-[#2d2d2d]/50 ml-2">
-              {sim.persona.industry} · {sim.persona.difficulty} · Mood: {sim.persona.mood}
+              {sim.persona.industry} · Mood: {sim.persona.mood}
             </span>
           </div>
-          <div className="ml-auto flex items-center gap-1">
-            {mode === "voice" ? (
-              <Volume2 size={14} className="text-[#2d5da1]" />
-            ) : (
-              <MessageSquare size={14} className="text-[#2d5da1]" />
-            )}
-            <span className="font-[family-name:var(--font-body)] text-xs text-[#2d2d2d]/50">
-              {mode === "voice" ? "Voice Active" : "Text Mode"}
-            </span>
+          <div className="ml-auto flex items-center gap-3">
+            {/* Quick stats */}
+            <div className="hidden md:flex items-center gap-2 text-xs font-[family-name:var(--font-body)] text-[#2d2d2d]/50">
+              <span className="flex items-center gap-1 px-2 py-1 bg-white border border-[#e5e0d8] rounded">
+                <Shield size={10} />
+                {guardrailLevel}
+              </span>
+              <span className="flex items-center gap-1 px-2 py-1 bg-white border border-[#e5e0d8] rounded">
+                <Gauge size={10} />
+                {eagerness}
+              </span>
+              {bgNoiseEnabled && (
+                <span className="flex items-center gap-1 px-2 py-1 bg-white border border-[#e5e0d8] rounded">
+                  <Waves size={10} />
+                  {bgNoiseSound}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-2 text-[#2d2d2d]/40 hover:text-[#2d2d2d] transition-colors"
+              title="Simulation settings"
+            >
+              <Settings size={16} />
+            </button>
           </div>
         </div>
       )}
 
-      {/* Voice Call Component (when in voice mode) */}
+      {/* Settings Panel */}
+      {showSettings && !ended && (
+        <div className="bg-white border-2 border-[#2d2d2d] p-4 wobbly-sm shadow-hard-sm mb-4 space-y-4">
+          <div className="flex items-center gap-2 font-[family-name:var(--font-heading)] font-bold text-sm">
+            <Settings size={14} />
+            Simulation Settings
+          </div>
+
+          {/* Difficulty Preset */}
+          <div>
+            <label className="block font-[family-name:var(--font-body)] text-xs font-bold mb-1 text-[#2d2d2d]/60">
+              Difficulty Preset
+            </label>
+            <div className="flex gap-1.5">
+              {DIFFICULTY_PRESETS.map((d) => (
+                <button
+                  key={d.value}
+                  onClick={() => {
+                    setDifficulty(d.value);
+                    applyDifficultyPreset(d.value);
+                  }}
+                  className={`flex-1 px-2 py-1.5 border text-xs font-[family-name:var(--font-body)] transition-all ${
+                    difficulty === d.value
+                      ? `${d.color} font-bold`
+                      : "border-[#e5e0d8] text-[#2d2d2d]/60 hover:border-[#2d2d2d]"
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Background Noise */}
+            <div>
+              <label className="block font-[family-name:var(--font-body)] text-xs font-bold mb-1 text-[#2d2d2d]/60">
+                Background Noise
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setBgNoiseEnabled(!bgNoiseEnabled)}
+                  className={`px-2 py-1 border text-xs font-[family-name:var(--font-body)] ${
+                    bgNoiseEnabled ? "bg-[#2d5da1] text-white border-[#2d5da1]" : "border-[#e5e0d8]"
+                  }`}
+                >
+                  {bgNoiseEnabled ? "ON" : "OFF"}
+                </button>
+                {bgNoiseEnabled && (
+                  <select
+                    value={bgNoiseSound}
+                    onChange={(e) => setBgNoiseSound(e.target.value)}
+                    className="px-2 py-1 border border-[#e5e0d8] text-xs font-[family-name:var(--font-body)]"
+                  >
+                    {BG_NOISES.map((n) => (
+                      <option key={n.value} value={n.value}>{n.icon} {n.label}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {/* Max Duration */}
+            <div>
+              <label className="block font-[family-name:var(--font-body)] text-xs font-bold mb-1 text-[#2d2d2d]/60">
+                Max Duration
+              </label>
+              <select
+                value={maxCallDuration}
+                onChange={(e) => setMaxCallDuration(parseInt(e.target.value))}
+                className="w-full px-2 py-1 border border-[#e5e0d8] text-xs font-[family-name:var(--font-body)]"
+              >
+                <option value={5}>5 min</option>
+                <option value={10}>10 min</option>
+                <option value={15}>15 min</option>
+                <option value={30}>30 min</option>
+              </select>
+            </div>
+
+            {/* Guardrails */}
+            <div>
+              <label className="block font-[family-name:var(--font-body)] text-xs font-bold mb-1 text-[#2d2d2d]/60">
+                Guardrails
+              </label>
+              <select
+                value={guardrailLevel}
+                onChange={(e) => setGuardrailLevel(e.target.value)}
+                className="w-full px-2 py-1 border border-[#e5e0d8] text-xs font-[family-name:var(--font-body)]"
+              >
+                {GUARDRAIL_LEVELS.map((g) => (
+                  <option key={g.value} value={g.value}>{g.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Eagerness */}
+            <div>
+              <label className="block font-[family-name:var(--font-body)] text-xs font-bold mb-1 text-[#2d2d2d]/60">
+                Speech Speed
+              </label>
+              <select
+                value={eagerness}
+                onChange={(e) => setEagerness(e.target.value)}
+                className="w-full px-2 py-1 border border-[#e5e0d8] text-xs font-[family-name:var(--font-body)]"
+              >
+                <option value="slow">Slow</option>
+                <option value="balanced">Balanced</option>
+                <option value="fast">Fast</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Voice Call Component */}
       {mode === "voice" && !ended && (
         <div className="mb-4">
           <VoiceCall
@@ -402,7 +585,7 @@ export default function SimulationPage() {
         </div>
       )}
 
-      {/* Text Input (only in text mode) */}
+      {/* Text Input */}
       {mode === "text" && !ended ? (
         <div className="flex gap-3">
           <textarea
