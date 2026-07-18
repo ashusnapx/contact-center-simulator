@@ -1,0 +1,146 @@
+@import url('https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Patrick+Hand&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #fdfbf7;
+  --color-foreground: #2d2d2d;
+  --color-muted: #e5e0d8;
+  --color-accent: #ff4d4d;
+  --color-border: #2d2d2d;
+  --color-secondary: #2d5da1;
+  --color-postit: #fff9c4;
+  --color-paper: #ffffff;
+  --font-heading: 'Kalam', cursive;
+  --font-body: 'Patrick Hand', cursive;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-body);
+  background-image: radial-gradient(#e5e0d8 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+}
+
+::selection {
+  background-color: #ff4d4d40;
+}
+
+/* Wobbly border radius utilities */
+.wobbly {
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+}
+
+.wobbly-md {
+  border-radius: 15px 225px 15px 255px / 225px 15px 255px 15px;
+}
+
+.wobbly-sm {
+  border-radius: 15px 15px 225px 15px / 225px 15px 15px 255px;
+}
+
+/* Hard shadow utilities */
+.shadow-hard {
+  box-shadow: 4px 4px 0px 0px #2d2d2d;
+}
+
+.shadow-hard-lg {
+  box-shadow: 8px 8px 0px 0px #2d2d2d;
+}
+
+.shadow-hard-sm {
+  box-shadow: 2px 2px 0px 0px #2d2d2d;
+}
+
+/* Hand-drawn button styles */
+.btn-hand {
+  font-family: var(--font-body);
+  border: 3px solid #2d2d2d;
+  background: white;
+  color: #2d2d2d;
+  box-shadow: 4px 4px 0px 0px #2d2d2d;
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  transition: all 100ms ease;
+  cursor: pointer;
+}
+
+.btn-hand:hover {
+  background: #ff4d4d;
+  color: white;
+  box-shadow: 2px 2px 0px 0px #2d2d2d;
+  transform: translate(2px, 2px);
+}
+
+.btn-hand:active {
+  box-shadow: none;
+  transform: translate(4px, 4px);
+}
+
+.btn-hand-secondary {
+  background: #e5e0d8;
+  color: #2d2d2d;
+}
+
+.btn-hand-secondary:hover {
+  background: #2d5da1;
+  color: white;
+}
+
+/* Tape decoration */
+.tape {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  width: 80px;
+  height: 24px;
+  background: rgba(229, 224, 216, 0.7);
+  border: 1px solid #d1ccc4;
+  z-index: 10;
+}
+
+/* Thumbtack decoration */
+.tack {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 14px;
+  background: #ff4d4d;
+  border-radius: 50%;
+  border: 2px solid #2d2d2d;
+  z-index: 10;
+}
+
+/* Dashed border style */
+.border-dashed-hand {
+  border: 2px dashed #2d2d2d;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #fdfbf7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e5e0d8;
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2d2d2d;
+}
