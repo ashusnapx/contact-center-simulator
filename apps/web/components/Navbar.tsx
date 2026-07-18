@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { useSession, signOut } from "next-auth/react";
+import { Menu, X, LogOut, LayoutDashboard } from "lucide-react";
+import Link from "next/link";
 
 const navLinks = [
   { label: "Features", href: "#features" },
@@ -12,19 +14,20 @@ const navLinks = [
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const { data: session } = useSession();
 
   return (
     <nav className="sticky top-0 z-50 bg-[#fdfbf7]/90 backdrop-blur-sm border-b-2 border-[#2d2d2d]">
       <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
         {/* Logo */}
-        <a href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <div className="w-10 h-10 bg-[#ff4d4d] border-3 border-[#2d2d2d] flex items-center justify-center text-white font-[family-name:var(--font-heading)] font-bold text-lg wobbly-sm shadow-hard">
             V
           </div>
           <span className="font-[family-name:var(--font-heading)] text-2xl font-bold tracking-tight">
             VaaniVerse
           </span>
-        </a>
+        </Link>
 
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-8">
@@ -38,9 +41,29 @@ export default function Navbar() {
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[#ff4d4d] transition-all group-hover:w-full" />
             </a>
           ))}
-          <a href="#cta" className="btn-hand px-6 py-2 text-lg">
-            Start Training
-          </a>
+
+          {session ? (
+            <div className="flex items-center gap-3">
+              <Link
+                href="/dashboard"
+                className="btn-hand btn-hand-secondary px-4 py-2 text-base flex items-center gap-2"
+              >
+                <LayoutDashboard size={18} strokeWidth={2.5} />
+                Dashboard
+              </Link>
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="btn-hand px-4 py-2 text-base flex items-center gap-2"
+              >
+                <LogOut size={18} strokeWidth={2.5} />
+                Logout
+              </button>
+            </div>
+          ) : (
+            <Link href="/login" className="btn-hand px-6 py-2 text-lg">
+              Start Training
+            </Link>
+          )}
         </div>
 
         {/* Mobile toggle */}
@@ -66,13 +89,35 @@ export default function Navbar() {
               {link.label}
             </a>
           ))}
-          <a
-            href="#cta"
-            className="btn-hand px-6 py-3 text-xl text-center"
-            onClick={() => setOpen(false)}
-          >
-            Start Training
-          </a>
+
+          {session ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="btn-hand px-6 py-3 text-xl text-center"
+                onClick={() => setOpen(false)}
+              >
+                Dashboard
+              </Link>
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  signOut({ callbackUrl: "/" });
+                }}
+                className="btn-hand btn-hand-secondary px-6 py-3 text-xl text-center"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="btn-hand px-6 py-3 text-xl text-center"
+              onClick={() => setOpen(false)}
+            >
+              Start Training
+            </Link>
+          )}
         </div>
       )}
     </nav>
