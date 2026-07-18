@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { Menu, X, LogOut, LayoutDashboard } from "lucide-react";
+import { Menu, X, LogOut, LayoutDashboard, Settings } from "lucide-react";
 import Link from "next/link";
 
 const navLinks = [
@@ -49,6 +49,13 @@ export default function Navbar() {
               >
                 <LayoutDashboard size={18} strokeWidth={2.5} />
                 Dashboard
+              </Link>
+              <Link
+                href="/dashboard/settings"
+                className="btn-hand btn-hand-secondary px-4 py-2 text-base flex items-center gap-2"
+              >
+                <Settings size={18} strokeWidth={2.5} />
+                Settings
               </Link>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}
@@ -97,6 +104,13 @@ export default function Navbar() {
                 onClick={() => setOpen(false)}
               >
                 Dashboard
+              </Link>
+              <Link
+                href="/dashboard/settings"
+                className="btn-hand btn-hand-secondary px-6 py-3 text-xl text-center"
+                onClick={() => setOpen(false)}
+              >
+                Settings
               </Link>
               <button
                 onClick={() => {

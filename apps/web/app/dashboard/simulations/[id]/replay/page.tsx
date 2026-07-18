@@ -45,7 +45,7 @@ type QABreakdown = {
 
 type CallDetails = {
   summary: string | null;
-  entities: Record<string, string>;
+  entities: Record<string, unknown>;
   evaluation: Record<string, unknown>;
   evalTag: string | null;
   recordingUrl: string;
@@ -365,7 +365,7 @@ export default function ReplayPage() {
       {/* Recording Player */}
       {callDetails?.recordingUrl && (
         <div className="bg-white border-2 border-[#2d2d2d] p-4 wobbly-sm shadow-hard-sm mb-8 flex items-center gap-4">
-          <audio id="call-recording" src={callDetails.recordingUrl} onEnded={() => setIsPlaying(false)} />
+          <audio id="call-recording" src={`/api/simulations/${id}/recording`} onEnded={() => setIsPlaying(false)} />
           <button
             onClick={togglePlayback}
             className="p-3 bg-[#2d5da1] text-white rounded-full hover:bg-[#1e4a8a] transition-colors"
@@ -465,7 +465,7 @@ export default function ReplayPage() {
                 ) : callDetails?.summary ? (
                   <div>
                     <p className="font-[family-name:var(--font-body)] text-sm leading-relaxed whitespace-pre-wrap">
-                      {callDetails.summary}
+                      {typeof callDetails.summary === "string" ? callDetails.summary : JSON.stringify(callDetails.summary)}
                     </p>
                     {callDetails.evalTag && (
                       <div className="mt-4 pt-4 border-t border-[#e5e0d8]">
@@ -538,12 +538,22 @@ export default function ReplayPage() {
                   </div>
                 ) : callDetails?.entities && Object.keys(callDetails.entities).length > 0 ? (
                   <div className="space-y-2">
-                    {Object.entries(callDetails.entities).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between py-2 border-b border-[#e5e0d8] last:border-0">
-                        <span className="font-[family-name:var(--font-body)] text-sm text-[#2d2d2d]/60">{key}</span>
-                        <span className="font-[family-name:var(--font-body)] text-sm font-bold">{String(value)}</span>
-                      </div>
-                    ))}
+                    {Object.entries(callDetails.entities).flatMap(([key, value]) => {
+                      if (value && typeof value === "object") {
+                        return Object.entries(value as Record<string, unknown>).map(([subKey, subValue]) => (
+                          <div key={`${key}.${subKey}`} className="flex items-center justify-between py-2 border-b border-[#e5e0d8] last:border-0">
+                            <span className="font-[family-name:var(--font-body)] text-sm text-[#2d2d2d]/60">{subKey}</span>
+                            <span className="font-[family-name:var(--font-body)] text-sm font-bold">{String(subValue ?? "—")}</span>
+                          </div>
+                        ));
+                      }
+                      return [
+                        <div key={key} className="flex items-center justify-between py-2 border-b border-[#e5e0d8] last:border-0">
+                          <span className="font-[family-name:var(--font-body)] text-sm text-[#2d2d2d]/60">{key}</span>
+                          <span className="font-[family-name:var(--font-body)] text-sm font-bold">{String(value ?? "—")}</span>
+                        </div>
+                      ];
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-8">
